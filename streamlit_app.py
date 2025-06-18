@@ -1,38 +1,39 @@
-
-# streamlit_app.py
-
 import streamlit as st
 import gspread
-import json
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
-# 페이지 설정
+# ✅ 인증 설정 (dict 변환 중요!)
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = Credentials.from_service_account_info(
+    dict(st.secrets["gcp_service_account"]),  # ⚠️ 꼭 dict로 감싸야 함
+    scopes=scopes
+)
+client = gspread.authorize(credentials)
+
+# ✅ 구글 시트 열기
+try:
+    sheet = client.open("이수율데이터").sheet1  # 또는 open_by_key("시트ID")
+    records = sheet.get_all_records()
+except Exception as e:
+    st.error(f"❌ 구글 시트 접근 중 오류가 발생했습니다: {e}")
+    st.stop()
+
+# ✅ UI 구성
 st.set_page_config(page_title="내 이수율 확인", layout="centered")
 st.title("📊 교육 이수율 확인 서비스")
-
 st.markdown("##### 이름과 전화번호 뒷자리를 입력해주세요.")
-name = st.text_input("이름", placeholder="예: 김이수")
-phone_last4 = st.text_input("전화번호 뒷자리", max_chars=4, placeholder="예: 1234")
-
+name = st.text_input("이름", placeholder="예: 전제영")
+phone_last4 = st.text_input("전화번호 뒷자리", max_chars=4, placeholder="예: 7797")
 st.divider()
 
-# 사용자 데이터 찾기 함수
+# ✅ 사용자 찾기
 def find_user(name, phone_last4):
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
-        client = gspread.authorize(creds)
-        sheet = client.open("이수율데이터").sheet1
-        records = sheet.get_all_records()
-        for user in records:
-            if user["이름"] == name and str(user["전화번호뒷자리"]) == phone_last4:
-                return user
-        return None
-    except Exception as e:
-        st.error(f"❌ 구글 시트 접근 중 오류가 발생했습니다: {e}")
-        return None
+    for user in records:
+        if user["이름"] == name and str(user["전화번호뒷자리"]) == phone_last4:
+            return user
+    return None
 
-# 버튼 클릭 시 결과 출력
+# ✅ 버튼 동작
 if st.button("📥 이수율 조회하기"):
     if not name or not phone_last4:
         st.warning("⚠️ 이름과 전화번호 뒷자리를 모두 입력해주세요.")
@@ -40,8 +41,8 @@ if st.button("📥 이수율 조회하기"):
         user = find_user(name, phone_last4)
         if user:
             st.success("🎉 이수율 조회 성공!")
-
             st.markdown(f"### 👤 {user['이름']}님의 이수 정보")
+
             col1, col2 = st.columns(2)
             with col1:
                 st.metric(label="사전진단", value=f"{user['사전진단']}%")
